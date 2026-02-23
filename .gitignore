@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# PyInstaller
+dist/
+build/
+*.spec.bak
+*.manifest
+
+# IDE
+.idea/
+.vs/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
+
+# Tool config
+.claude/
