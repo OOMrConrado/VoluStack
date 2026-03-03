@@ -1,6 +1,6 @@
 import qtawesome as qta
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QIcon, QPixmap
+from PyQt6.QtGui import QFont, QFontMetrics, QIcon, QPixmap
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
 from volustack.audio.session import AudioSessionInfo
@@ -87,11 +87,20 @@ class SessionRowWidget(QWidget):
         layout.addWidget(self._pct_label)
 
     def _set_name_text(self, name: str, suffix: str) -> None:
+        metrics = QFontMetrics(self._name_label.font())
+        max_w = self._name_label.width() or 70
+
         if suffix:
-            self._name_label.setText(f'{name} <span style="color:{TEXT_FAINT}; font-size:7pt">({suffix})</span>')
+            suffix_part = f" ({suffix})"
+            available = max_w - metrics.horizontalAdvance(suffix_part)
+            elided = metrics.elidedText(name, Qt.TextElideMode.ElideRight, max(available, 20))
+            self._name_label.setText(
+                f'{elided} <span style="color:{TEXT_FAINT}; font-size:7pt">({suffix})</span>'
+            )
             self._name_label.setTextFormat(Qt.TextFormat.RichText)
         else:
-            self._name_label.setText(name)
+            elided = metrics.elidedText(name, Qt.TextElideMode.ElideRight, max_w)
+            self._name_label.setText(elided)
             self._name_label.setTextFormat(Qt.TextFormat.PlainText)
 
     def _on_slider_changed(self, value: int) -> None:
