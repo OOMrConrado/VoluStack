@@ -115,16 +115,24 @@ class AudioManager:
                 except Exception:
                     continue
 
-        # -- Phase 2: per-PID dedup ------------------------------------------
-        by_pid: defaultdict[int, list[tuple[AudioSessionInfo, ISimpleAudioVolume, bool]]] = defaultdict(list)
+        # -- Phase 2: dedup same stream across devices, keep distinct streams --
+        # WASAPI session IDs look like: {device_endpoint}|{stream_guid}#{pid}
+        # Same PID + same stream_key = same logical stream on different devices → dedup.
+        # Same PID + different stream_key = different streams (e.g. Discord voice vs noti) → keep both.
+        by_stream: defaultdict[tuple[int, str], list[tuple[AudioSessionInfo, ISimpleAudioVolume, bool]]] = defaultdict(list)
         for item in candidates:
-            by_pid[item[0].process_id].append(item)
+            pid = item[0].process_id
+            sid = item[0].session_identifier
+            _, _, stream_key = sid.partition("|")
+            if not stream_key:
+                stream_key = sid
+            by_stream[(pid, stream_key)].append(item)
 
         sessions: list[AudioSessionInfo] = []
         new_controls: dict[str, ISimpleAudioVolume] = {}
         session_from_default: dict[str, bool] = {}
 
-        for pid, group in by_pid.items():
+        for (pid, skey), group in by_stream.items():
             # Sort: Active first (state=1 → sort key 0), then default device first
             group.sort(key=lambda x: (x[0].state != AppAudioState.ACTIVE, not x[2]))
             best_info, best_ctl, best_is_default = group[0]
@@ -132,12 +140,15 @@ class AudioManager:
             new_controls[best_info.session_identifier] = best_ctl
             session_from_default[best_info.session_identifier] = best_is_default
 
-        # -- Phase 3: label duplicates (e.g. Discord noti vs voz) ------------
+        # -- Phase 3: label duplicate executables (e.g. Discord noti vs voz) --
         from collections import Counter
         exe_counts = Counter(s.executable_path for s in sessions)
         for s in sessions:
             if exe_counts[s.executable_path] > 1:
-                s.display_suffix = "noti" if session_from_default.get(s.session_identifier, True) else "voz"
+                if s.state == AppAudioState.ACTIVE:
+                    s.display_suffix = "voz"
+                else:
+                    s.display_suffix = "noti"
 
         self._volume_controls = new_controls
         return sessions
