@@ -74,6 +74,7 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueName: "VoluStack"; ValueData: """{app}\{#MyAppExeName}"" --minimized"; ValueType: string; Flags: uninsdeletevalue; Tasks: startupentry
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; Flags: nowait skipifnotsilent
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 [UninstallRun]

@@ -260,7 +260,7 @@ _CHECKBOX_STYLE = f"""
 class SettingsPanelWidget(QWidget):
     hotkey_changed = pyqtSignal(str, str)  # (modifiers, key)
     check_updates_clicked = pyqtSignal()
-    download_clicked = pyqtSignal()
+    download_clicked = pyqtSignal(str)  # download_url
     recording_started = pyqtSignal()
     recording_stopped = pyqtSignal()
 
@@ -352,14 +352,16 @@ class SettingsPanelWidget(QWidget):
 
     def _open_download(self) -> None:
         if self._download_url:
-            from PyQt6.QtCore import QUrl
-            from PyQt6.QtGui import QDesktopServices
-            QDesktopServices.openUrl(QUrl(self._download_url))
-            self._download_url = None
-            self._download_btn.hide()
-            self._check_btn.show()
-            self._update_status.setText("")
-            self.download_clicked.emit()
+            self._download_btn.setEnabled(False)
+            self._download_btn.setText("0%")
+            self.download_clicked.emit(self._download_url)
+
+    def set_download_progress(self, pct: int) -> None:
+        self._download_btn.setText(f"{pct}%")
+
+    def set_download_failed(self) -> None:
+        self._download_btn.setEnabled(True)
+        self._download_btn.setText("Retry")
 
     def set_update_status(self, text: str, download_url: str | None = None) -> None:
         self._update_status.setText(text)

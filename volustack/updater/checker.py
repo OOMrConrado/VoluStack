@@ -1,3 +1,8 @@
+import os
+import subprocess
+import sys
+import tempfile
+
 import requests
 from packaging.version import Version
 
@@ -49,3 +54,40 @@ class UpdateChecker:
             )
         except Exception:
             return None
+
+    @staticmethod
+    def download_update(
+        url: str,
+        progress_callback: callable = None,
+    ) -> str:
+        """Download installer to temp dir. Returns path to the downloaded file."""
+        path = os.path.join(tempfile.gettempdir(), "VoluStack-Setup.exe")
+        resp = requests.get(url, stream=True, timeout=60)
+        resp.raise_for_status()
+        total = int(resp.headers.get("content-length", 0))
+        downloaded = 0
+        with open(path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback and total > 0:
+                        progress_callback(int(downloaded * 100 / total))
+        return path
+
+    @staticmethod
+    def install_update(installer_path: str) -> None:
+        """Launch installer silently and exit the app."""
+        subprocess.Popen(
+            [
+                installer_path,
+                "/SILENT",
+                "/SUPPRESSMSGBOXES",
+                "/NORESTART",
+                "/CLOSEAPPLICATIONS",
+            ],
+            creationflags=subprocess.DETACHED_PROCESS
+            | subprocess.CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+        )
+        sys.exit(0)

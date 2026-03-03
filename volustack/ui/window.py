@@ -294,8 +294,24 @@ class VoluStackWindow(QWidget):
         )
         self._header.hide_update_dot()
 
-    def _on_download_clicked(self) -> None:
-        self._pending_update = None
+    def _on_download_clicked(self, url: str) -> None:
+        from volustack.updater.worker import UpdateDownloadWorker
+
+        self._dl_worker = UpdateDownloadWorker(url, parent=self)
+        self._dl_worker.progress.connect(self._settings_panel.set_download_progress)
+        self._dl_worker.finished.connect(self._on_download_finished)
+        self._dl_worker.failed.connect(self._on_download_failed)
+        self._dl_worker.start()
+
+    def _on_download_finished(self, installer_path: str) -> None:
+        from volustack.updater.checker import UpdateChecker
+
+        self._hotkey.dispose()
+        self._tray.dispose()
+        UpdateChecker.install_update(installer_path)
+
+    def _on_download_failed(self, error: str) -> None:
+        self._settings_panel.set_download_failed()
 
     def _on_manual_check_finished(self) -> None:
         self._settings_panel.set_checking(False)
