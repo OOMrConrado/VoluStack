@@ -120,6 +120,7 @@ class VoluStackWindow(QWidget):
         self._settings_panel = SettingsPanelWidget(self._settings.hotkey_combo)
         self._settings_panel.hotkey_changed.connect(self._on_hotkey_changed)
         self._settings_panel.check_updates_clicked.connect(self._on_check_updates)
+        self._settings_panel.download_clicked.connect(self._on_download_clicked)
         self._settings_panel.recording_started.connect(self._hotkey.unregister)
         self._settings_panel.recording_stopped.connect(
             lambda: self._hotkey.register(self._toggle_visibility, self._settings.hotkey_combo)
@@ -239,7 +240,8 @@ class VoluStackWindow(QWidget):
             self._header.set_settings_active(True)
             if self._pending_update:
                 self._settings_panel.set_update_status(
-                    f"v{self._pending_update.version} available"
+                    f"v{self._pending_update.version} available",
+                    self._pending_update.download_url,
                 )
                 self._header.hide_update_dot()
         else:
@@ -287,8 +289,13 @@ class VoluStackWindow(QWidget):
 
     def _on_manual_update_found(self, info: UpdateInfo) -> None:
         self._pending_update = info
-        self._settings_panel.set_update_status(f"v{info.version} available!")
+        self._settings_panel.set_update_status(
+            f"v{info.version} available!", info.download_url
+        )
         self._header.hide_update_dot()
+
+    def _on_download_clicked(self) -> None:
+        self._pending_update = None
 
     def _on_manual_check_finished(self) -> None:
         self._settings_panel.set_checking(False)

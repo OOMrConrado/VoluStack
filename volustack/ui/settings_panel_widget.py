@@ -260,6 +260,7 @@ _CHECKBOX_STYLE = f"""
 class SettingsPanelWidget(QWidget):
     hotkey_changed = pyqtSignal(str, str)  # (modifiers, key)
     check_updates_clicked = pyqtSignal()
+    download_clicked = pyqtSignal()
     recording_started = pyqtSignal()
     recording_stopped = pyqtSignal()
 
@@ -332,10 +333,43 @@ class SettingsPanelWidget(QWidget):
         self._check_btn.clicked.connect(self.check_updates_clicked.emit)
         update_row.addWidget(self._check_btn)
 
+        self._download_btn = QPushButton("Download")
+        self._download_btn.setFixedHeight(28)
+        self._download_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._download_btn.setFont(QFont(FONT_FAMILY, 8))
+        self._download_btn.setStyleSheet(
+            f"QPushButton {{ background: {ACCENT_COLOR}; color: #000; "
+            f"border: none; border-radius: 4px; padding: 0 10px; "
+            f"font-weight: bold; }}"
+            f"QPushButton:hover {{ background: #7DD8FF; }}"
+        )
+        self._download_btn.clicked.connect(self._open_download)
+        self._download_btn.hide()
+        self._download_url: str | None = None
+        update_row.addWidget(self._download_btn)
+
         layout.addLayout(update_row)
 
-    def set_update_status(self, text: str) -> None:
+    def _open_download(self) -> None:
+        if self._download_url:
+            from PyQt6.QtCore import QUrl
+            from PyQt6.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl(self._download_url))
+            self._download_url = None
+            self._download_btn.hide()
+            self._check_btn.show()
+            self._update_status.setText("")
+            self.download_clicked.emit()
+
+    def set_update_status(self, text: str, download_url: str | None = None) -> None:
         self._update_status.setText(text)
+        self._download_url = download_url
+        if download_url:
+            self._check_btn.hide()
+            self._download_btn.show()
+        else:
+            self._download_btn.hide()
+            self._check_btn.show()
 
     def set_checking(self, checking: bool) -> None:
         self._check_btn.setEnabled(not checking)
