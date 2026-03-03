@@ -1,7 +1,7 @@
 import ctypes
 import gc
 
-from PyQt6.QtCore import QPoint, Qt, QTimer
+from PyQt6.QtCore import QEvent, QPoint, Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
@@ -461,6 +461,17 @@ class VoluStackWindow(QWidget):
         painter.drawPath(path)
 
         painter.end()
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.ActivationChange and not self.isActiveWindow():
+            # Click outside the overlay — hide and restore previous window
+            prev = self._prev_foreground
+            self._prev_foreground = None
+            self.hide()
+            if prev:
+                _user32.BringWindowToTop(prev)
+                _user32.SetForegroundWindow(prev)
+        super().changeEvent(event)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
