@@ -1,8 +1,17 @@
+import ctypes
 import gc
 
 from PyQt6.QtCore import QPoint, Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
+
+# ── Win32 API for game overlay support ──────────────────────────────
+_user32 = ctypes.windll.user32
+_kernel32 = ctypes.windll.kernel32
+_HWND_TOPMOST = -1
+_SWP_NOMOVE = 0x0002
+_SWP_NOSIZE = 0x0001
+_SWP_NOACTIVATE = 0x0010
 
 from volustack.audio.manager import AudioManager
 from volustack.audio.session import AppAudioState, AudioSessionInfo
@@ -42,6 +51,7 @@ class VoluStackWindow(QWidget):
         self.move(12, 12)
 
         self._drag_pos: QPoint | None = None
+        self._prev_foreground: int | None = None
         self._expanded = False
         self._settings_visible = False
         self._session_widgets: dict[str, SessionRowWidget] = {}
@@ -140,6 +150,9 @@ class VoluStackWindow(QWidget):
         self._volume_timer = QTimer(self)
         self._volume_timer.timeout.connect(self._sync_volumes)
 
+        self._topmost_timer = QTimer(self)
+        self._topmost_timer.timeout.connect(self._enforce_topmost)
+
         if not self._minimized_start:
             QTimer.singleShot(1000, self._start_polling)
 
@@ -147,6 +160,7 @@ class VoluStackWindow(QWidget):
         self._poll_sessions()
         self._poll_timer.start(3000)
         self._volume_timer.start(500)
+        self._topmost_timer.start(1000)
 
     def _poll_sessions(self) -> None:
         sessions = self._audio_manager.enumerate_sessions()
@@ -329,11 +343,19 @@ class VoluStackWindow(QWidget):
 
     def _toggle_visibility(self) -> None:
         if self.isVisible():
+            prev = self._prev_foreground
+            self._prev_foreground = None
             self.hide()
+            # Restore focus to the previous window (the game)
+            if prev:
+                _user32.BringWindowToTop(prev)
+                _user32.SetForegroundWindow(prev)
         else:
+            # Save the current foreground window so we can restore it on hide
+            self._prev_foreground = _user32.GetForegroundWindow()
             self.show()
-            self.activateWindow()
-            self.raise_()
+            self._enforce_topmost()
+            self._bring_to_foreground()
 
     def _on_close(self) -> None:
         if self._settings.minimize_to_tray:
@@ -341,10 +363,42 @@ class VoluStackWindow(QWidget):
         else:
             self._cleanup_and_quit()
 
+    # -- Win32 game overlay helpers --
+
+    def _enforce_topmost(self) -> None:
+        """Re-assert HWND_TOPMOST via Win32 so overlay stays above games."""
+        hwnd = int(self.winId())
+        _user32.SetWindowPos(
+            hwnd, _HWND_TOPMOST, 0, 0, 0, 0,
+            _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOACTIVATE,
+        )
+
+    def _bring_to_foreground(self) -> None:
+        """Force overlay to foreground, stealing focus from games."""
+        hwnd = int(self.winId())
+        fg = _user32.GetForegroundWindow()
+        fg_thread = _user32.GetWindowThreadProcessId(fg, None)
+        our_thread = _kernel32.GetCurrentThreadId()
+
+        attached = False
+        if fg_thread and fg_thread != our_thread:
+            attached = bool(_user32.AttachThreadInput(fg_thread, our_thread, True))
+
+        _user32.ShowWindow(hwnd, 5)  # SW_SHOW
+        _user32.BringWindowToTop(hwnd)
+        _user32.SetForegroundWindow(hwnd)
+
+        if attached:
+            _user32.AttachThreadInput(fg_thread, our_thread, False)
+
+        self.activateWindow()
+        self.raise_()
+
     def _sleep(self) -> None:
         """Enter sleep mode: stop polling, destroy widgets, free caches."""
         self._poll_timer.stop()
         self._volume_timer.stop()
+        self._topmost_timer.stop()
 
         for widget in self._session_widgets.values():
             self._sessions_layout.removeWidget(widget)
@@ -360,10 +414,12 @@ class VoluStackWindow(QWidget):
         self._poll_sessions()
         self._poll_timer.start(3000)
         self._volume_timer.start(500)
+        self._topmost_timer.start(1000)
 
     def _cleanup_and_quit(self) -> None:
         self._poll_timer.stop()
         self._volume_timer.stop()
+        self._topmost_timer.stop()
         self._hotkey.dispose()
         self._tray.dispose()
         for worker in (self._update_worker, self._manual_update_worker):
